@@ -3,6 +3,7 @@ const express = require("express")
 const router = express.Router()
 const { OrderItem } = require("../models/orderItem")
 
+// GET All Order
 router.get("/", async (req, res) => {
   const orderList = await Order.find()
     .populate("user", "name")
@@ -14,6 +15,7 @@ router.get("/", async (req, res) => {
   res.send(orderList)
 })
 
+// GET Order by ID
 router.get("/:id", async (req, res) => {
   const order = await Order.findById(req.params.id)
     .populate("user", "name")
@@ -28,6 +30,7 @@ router.get("/:id", async (req, res) => {
   res.send(order)
 })
 
+// CREATE Order
 router.post("/", async (req, res) => {
   const orderItemsIds = Promise.all(
     req.body.orderItems.map(async (orderItem) => {
@@ -44,6 +47,7 @@ router.post("/", async (req, res) => {
 
   const orderItemsIdsResolved = await orderItemsIds
 
+  // total price func
   const totalPrices = await Promise.all(
     orderItemsIdsResolved.map(async (orderItemId) => {
       const orderItem = await OrderItem.findById(orderItemId).populate(
@@ -79,6 +83,7 @@ router.post("/", async (req, res) => {
   res.send(order)
 })
 
+// UPDATE Order
 router.put("/:id", async (req, res) => {
   const order = await Order.findByIdAndUpdate(
     req.params.id,
@@ -94,10 +99,12 @@ router.put("/:id", async (req, res) => {
   res.send(order)
 })
 
+// DELETE Order
 router.delete("/:id", (req, res) => {
   Order.findByIdAndRemove(req.params.id)
     .then(async (order) => {
       if (order) {
+        // DELETE Order Item
         await order.orderItems.map(async (orderItem) => {
           await OrderItem.findByIdAndRemove(orderItem)
         })
@@ -113,6 +120,46 @@ router.delete("/:id", (req, res) => {
     .catch((err) => {
       return res.status(400).json({ success: false, message: err })
     })
+})
+
+// Total Sales
+router.get("get/totalsales", async (req, res) => {
+  const totalSales = await Order.aggregate([
+    { $group: { _id: null, totalsales: { $sum: "$totalPrice" } } },
+  ])
+
+  if (!totalSales) {
+    return res.status(400).send("The order cannot be generated")
+  } else {
+    res.send({ totalsales: totalSales.pop().totalsales })
+  }
+})
+
+// * COUNT order
+router.get("/get/count", async (req, res) => {
+  const orderCount = await Order.countDocuments()
+
+  if (!orderCount) {
+    res.status(500).json({ success: false })
+  }
+  res.send({
+    orderCount: orderCount,
+  })
+})
+
+// GET User Order
+router.get("/get/userorders/:userId", async (req, res) => {
+  const userOrderList = await Order.find({ user: req.params.userId })
+    .populate({
+      path: "orderItems",
+      populate: { path: "product", populate: "category" },
+    })
+    .sort({ dateOrdered: -1 })
+
+  if (!userOrderList) {
+    res.status(500).json({ success: false })
+  }
+  res.send(userOrderList)
 })
 
 module.exports = router
